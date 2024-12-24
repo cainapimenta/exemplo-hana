@@ -1,0 +1,14 @@
+{
+    "ALFA_TREINAMENTO_HANA_FORNECEDOR": {
+        "target": {
+            "object": "VT_FORNECEDORES",
+            "schema.configure": "granting-service/schema"
+        }
+    },
+    "ALFA_TREINAMENTO_HANA_PRODUTO": {
+        "target": {
+            "object": "VT_PRODUTOS",
+            "schema.configure": "granting-service/schema"
+        }
+    }
+}

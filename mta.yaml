@@ -1,0 +1,158 @@
+_schema-version: 3.3.0
+ID: exemplo-hana
+description: A simple CAP project.
+version: 1.0.0
+modules:
+  - name: exemplo-hana-srv
+    type: nodejs
+    path: gen/srv
+    requires:
+      - name: exemplo-hana-destination
+      - name: exemplo-hana-auth
+      - name: exemplo-hana-db
+    provides:
+      - name: srv-api
+        properties:
+          srv-url: ${default-url}
+    parameters:
+      buildpack: nodejs_buildpack
+      disk-quota: 1024M
+      memory: 256M
+      readiness-health-check-http-endpoint: /health
+      readiness-health-check-type: http
+    build-parameters:
+      builder: npm
+  - name: exemplo-hana-app-deployer
+    type: com.sap.application.content
+    path: gen
+    requires:
+      - name: exemplo-hana-html5-repo-host
+        parameters:
+          content-target: true
+    build-parameters:
+      build-result: app/
+      requires:
+        - artifacts:
+            - alfaexemplohanapurchaseorders.zip
+          name: alfaexemplohanapurchaseorders
+          target-path: app//
+  - name: treinamentoalfapurchaseorders
+    type: html5
+    path: app/purchase_orders
+    build-parameters:
+      build-result: dist
+      builder: custom
+      commands:
+        - npm install
+        - npm run build:cf
+      supported-platforms:
+        []
+  - name: alfaexemplohanapurchaseorders
+    type: html5
+    path: app/purchase_orders
+    build-parameters:
+      build-result: dist
+      builder: custom
+      commands:
+        - npm install
+        - npm run build:cf
+      supported-platforms:
+        []
+
+  - name: exemplo-hana-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+    requires:
+      - name: exemplo-hana-db
+        properties:
+          TARGET_CONTAINER: ~{hdi-container-service}
+      - name: granting-service
+  - name: exemplo-hana-destinations
+    type: com.sap.application.content
+    requires:
+      - name: exemplo-hana-auth
+        parameters:
+          service-key:
+            name: exemplo-hana-auth-key
+      - name: exemplo-hana-html5-repo-host
+        parameters:
+          service-key:
+            name: exemplo-hana-html5-repo-host-key
+      - name: srv-api
+      - name: exemplo-hana-destination
+        parameters:
+          content-target: true
+    build-parameters:
+      no-source: true
+    parameters:
+      content:
+        instance:
+          destinations:
+            - Authentication: OAuth2UserTokenExchange
+              HTML5.Timeout: 120000
+              Name: exemplo-hana-srv
+              TokenServiceInstanceName: exemplo-hana-auth
+              TokenServiceKeyName: exemplo-hana-auth-key
+              URL: ~{srv-api/srv-url}
+              sap.cloud.service: exemplo-hana.service
+            - Name: exemplo-hana-html5-repo-host
+              ServiceInstanceName: exemplo-hana-html5-repo-host
+              ServiceKeyName: exemplo-hana-html5-repo-host-key
+              sap.cloud.service: exemplo-hana.service
+            - Authentication: OAuth2UserTokenExchange
+              Name: exemplo-hana-auth
+              ServiceInstanceName: exemplo-hana-auth
+              ServiceKeyName: exemplo-hana-auth-key
+              sap.cloud.service: exemplo-hana.service
+          existing_destinations_policy: ignore
+resources:
+  - name: exemplo-hana-destination
+    type: org.cloudfoundry.managed-service
+    parameters:
+      config:
+        HTML5Runtime_enabled: true
+        init_data:
+          instance:
+            destinations:
+              - Authentication: NoAuthentication
+                Name: ui5
+                ProxyType: Internet
+                Type: HTTP
+                URL: https://ui5.sap.com
+            existing_destinations_policy: update
+      service: destination
+      service-plan: lite
+  - name: exemplo-hana-html5-repo-host
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: html5-apps-repo
+      service-plan: app-host
+  - name: exemplo-hana-auth
+    type: org.cloudfoundry.managed-service
+    parameters:
+      config:
+        tenant-mode: dedicated
+        xsappname: exemplo-hana-${org}-${space}
+      path: ./xs-security.json
+      service: xsuaa
+      service-plan: application
+  - name: exemplo-hana-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana
+      service-plan: hdi-shared
+    properties:
+      hdi-container-service: ${service-name}
+  - name: granting-service
+    type: org.cloudfoundry.existing-service
+parameters:
+  deploy_mode: html5-repo
+  enable-parallel-deployments: true
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm ci
+        - npx cds build --production
